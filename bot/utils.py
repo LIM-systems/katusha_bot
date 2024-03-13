@@ -22,14 +22,16 @@ async def user_notification(user_data, training_data, when):
     place = training_data.get('place')
     address = training_data.get('address')
     url = training_data.get('route')
-    if training_data.get('day') == 'friday':
-        training_type = '( *игровая тренировка* )'
-    else:
-        training_type = '( *тренировка* )'
+    comment_1 = training_data.get('comment_1')
+    comment_2 = training_data.get('comment_2')
+    if comment_1: comment_text_1 = comment_1
+    else: comment_text_1 = ''
+    if comment_2: comment_text_2 = comment_2
+    else: comment_text_2 = ''
     message = f'''Уважаемый хоккеист!
 <b>{alarm}</b>
 {when}{date}
-🕖Лёд в {time}{training_type} 
+🕖{comment_text_1} {time} {comment_text_2} 
 🏟Стадион: {place} 
 {address}
 
@@ -167,15 +169,42 @@ async def game_checker():
             for user in users_data:
                 await game_notification(user, game)
 
+async def users_subscription_notfn(user):
+    user_tg_id = user.get('tg_id')
+    abonement_name = user.get('abonement')
+    message = f'''<b>Внимание! Уважаемый хоккеист!</b>
 
+В этом месяце у Вас заканчивается абонемент "{abonement_name}".
+Не забудьте продлить до 25 числа.
+'''
+    await bot.send_message(chat_id=user_tg_id, text=message)
+
+async def subscription_checker():
+    users = await dj.get_subscriptions()
+    if not users:
+        return
+    for user in users:
+        await users_subscription_notfn(user)
 
 
 async def scheduler():
     aioschedule.every(5).seconds.do(training_checker)
     aioschedule.every(5).seconds.do(game_checker)
+    aioschedule.every(2).seconds.do(subscription_checker)
+    # aioschedule.every().day.at('12:00').do(subscription_checker)
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)
 
 async def on_startup(_):
     asyncio.create_task(scheduler())
+
+
+# показ меню абонементов
+async def display_all_abonements(msg):
+    abonements = await dj.get_abonements()
+    message = 'Выберите абонемент\n\n'
+    keyboard = types.InlineKeyboardMarkup()
+    for abonement in abonements:
+        keyboard.add(types.InlineKeyboardButton(abonement.name, callback_data=f'abonement_button_{abonement.id}'))
+    await msg.answer(message, reply_markup=keyboard)

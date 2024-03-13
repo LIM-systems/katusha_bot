@@ -5,6 +5,7 @@ class StartState(StatesGroup):
     phone_number_sign_up = State()
     name = State()
     birthday = State()
+    source = State()
 
 class CahngeProfileState(StatesGroup):
     phone_number = State()
@@ -16,6 +17,7 @@ class Adm_State(StatesGroup):
     megaphone = State()
     text = State()
     photo = State()
+    document = State()
     trainings = State()
 
 class Dialogue_State(StatesGroup):

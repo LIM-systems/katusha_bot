@@ -7,6 +7,7 @@ class User(models.Model):
     name = models.CharField(max_length=50, verbose_name='ФИО')
     tel_number = models.CharField(max_length=16, verbose_name='Телефон', help_text='В формате: 8000000000')
     telegram_id = models.BigIntegerField(verbose_name='Телеграм ID', blank=True, null=True)
+    source = models.CharField(max_length=255, verbose_name='Источник', blank=True, null=True)
     birthday = models.DateField(verbose_name='День рождения', blank=True, null=True)
     newbie = models.BooleanField(default=False, verbose_name='Новичок?')
 
@@ -27,6 +28,8 @@ class Training(models.Model):
     address = models.CharField(max_length=100, verbose_name='Адрес проведения')
     was_end = models.BooleanField(default=False, verbose_name='Завершена')
     route = models.URLField(verbose_name='Ссылка на маршрут')
+    comment_1 = models.TextField(verbose_name='1ый Комментарий', blank=True, null=True)
+    comment_2 = models.TextField(verbose_name='2ой Комментарий', blank=True, null=True)
 
     class Meta:
         verbose_name = 'Тренировка'
@@ -123,3 +126,33 @@ class GameJournal(models.Model):
     def __str__(self):
         return str(self.game)
 
+
+class Abonements(models.Model):
+    name = models.CharField(max_length=200, verbose_name='Название')
+    description = models.TextField(verbose_name='Описание')
+    price = models.IntegerField(verbose_name='Цена рублей')
+    time = models.IntegerField(verbose_name='Время абонемента в месяцах', 
+                            help_text='Указывается в случае если абонемент требует продления',
+                            blank=True, null=True)
+    is_subscribe = models.BooleanField(verbose_name='Требует продления?', default=False)
+
+    class Meta:
+        verbose_name = 'Абонемент'
+        verbose_name_plural = 'Абонементы'
+
+    def __str__(self):
+        return str(self.name)
+
+
+class AbonementJournal(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='Пользователь')
+    abonement = models.ForeignKey(Abonements, on_delete=models.CASCADE, verbose_name='Абонемент')
+    date_time = models.DateTimeField(verbose_name='Дата активации', auto_now_add=True)
+    end = models.BooleanField(verbose_name='Истёк', default=False, null=True)
+
+    class Meta:
+        verbose_name = 'Журнал абонементов'
+        verbose_name_plural = 'Журнал абонементов'
+
+    def __str__(self):
+        return str(self.user.name)

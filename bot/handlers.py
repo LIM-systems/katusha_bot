@@ -11,7 +11,9 @@ from bot.dialogue_utils import (send_dialogue_message,
                                 send_dialogue_message_with_media)
 from bot.loader import dp, bot
 from bot.states import Adm_State, Dialogue_State, StartState, CahngeProfileState
-from bot.utils import user_notification, game_notification
+from bot.utils import user_notification, game_notification, display_all_abonements
+from hockey_back.settings import PAYMENT_TOKEN
+import json
 
 
 async def main_menu_message(msg):
@@ -111,14 +113,16 @@ async def get_training_info(msg: types.Message):
             time = training.get('time').strftime('%H:%M')
             address = training.get('address')
             place = training.get('place')
-            if training.get('day') == 'friday':
-                training_type = '( *игровая тренировка* )'
-            else:
-                training_type = '( *тренировка* )'
+            comment_1 = training.get('comment_1')
+            comment_2 = training.get('comment_2')
+            if comment_1: comment_text_1 = comment_1
+            else: comment_text_1 = ''
+            if comment_2: comment_text_2 = comment_2
+            else: comment_text_2 = ''
             button = types.InlineKeyboardButton(f'{count}) {time}', callback_data=f'select_training_{id}')
             keyboard.add(button)
             message += f'''{count})
-🕖Лёд в {time}{training_type} 
+🕖{comment_text_1} {time} {comment_text_2} 
 🏟Стадион: {place} 
 {address}
 
@@ -135,6 +139,7 @@ async def show_selected_training(call: types.CallbackQuery):
         await call.message.answer('Кажется, запись на тренировку завершена.')
         return
     await user_notification({'id': call.from_user.id, 'first_not': True} , trainings_data[0], 'today')
+
 
 async def get_user_profile(msg):
     user_data = await dj.check_new_user(msg.from_user.id)
@@ -199,6 +204,17 @@ async def get_training_info(msg: types.Message):
         await msg.answer('Эта команда для игроков')
         return
     await get_user_profile(msg)
+
+
+# команда показа всех абонементов
+@dp.message_handler(commands=['abonements'])
+async def get_abonements(msg: types.Message):
+    user = await dj.check_new_user(msg.from_user.id)
+    if not user:
+        await main_menu_message(msg)
+        return
+    await display_all_abonements(msg)
+
 
 @dp.callback_query_handler(lambda call: call.data.startswith('change_button'))
 async def change_data(call: types.CallbackQuery):
@@ -426,7 +442,7 @@ async def dialog_handler(msg: types.Message):
                 count += 1
             await msg.answer(message, reply_markup=keyboard)
         elif msg.text == 'Рупор 📢':
-            await msg.answer('Напишите сообщения для всех игроков. (Сообщение может содержать текст и одну картинку)')
+            await msg.answer('Напишите сообщения для всех игроков. (Сообщение может содержать текст и/или одну картинку/один файл)')
             await Adm_State.megaphone.set()
         else:
             await send_dialogue_message(msg)
@@ -446,12 +462,14 @@ async def select_game_admin(call: types.CallbackQuery):
     await show_users_game(users_data, call.message)
 
 
-@dp.message_handler(state=Adm_State.megaphone, content_types=['text', 'photo'])
+@dp.message_handler(state=Adm_State.megaphone, content_types=['text', 'photo', 'document'])
 async def save_message_to_state(msg: types.Message, state: FSMContext):
     if msg.content_type == 'text':
         await state.update_data(text=msg.text, photo=None)
     if msg.content_type == 'photo':
         await state.update_data(text=msg.caption, photo=msg.photo[-1].file_id)
+    if msg.content_type == 'document':
+        await state.update_data(text=msg.caption, document=msg.document.file_id)
     cancel_megaphone_button = types.InlineKeyboardButton('Отмена', callback_data='cancel_megaphone_button')
     send_megaphone_button = types.InlineKeyboardButton('Отправить', callback_data='send_megaphone_button')
     keyboard = types.InlineKeyboardMarkup().row(cancel_megaphone_button, send_megaphone_button)
@@ -475,11 +493,14 @@ async def send_megaphone(call: types.CallbackQuery, state: FSMContext):
     state_data = await state.get_data()
     state_text = state_data.get('text')
     state_photo = state_data.get('photo')
+    state_document = state_data.get('document')
     for_del = await call.message.answer('📩 Рассылаю...')
     for id in users_ids:
         try:
             if state_photo:
                 await bot.send_photo(chat_id=id, photo=state_photo, caption=state_text)
+            elif state_document:
+                await bot.send_document(chat_id=id, document=state_document, caption=state_text)
             else:
                 await bot.send_message(chat_id=id, text=state_text)
         except Exception as e:
@@ -705,7 +726,7 @@ async def cancel_name(call: types.CallbackQuery, state: FSMContext):
 async def get_tel_number(msg: types.Message, state: FSMContext):
     if msg.text.isdigit() and len(msg.text) == 11:
         await state.update_data(phone_number_sign_up=msg.text)
-        await msg.answer('''И последний вопрос. Когда у Вас день рождения?
+        await msg.answer('''Когда у Вас день рождения?
 Укажите в формате: 01.01.1970''', reply_markup=cancel_reg_keyboard())
         await StartState.birthday.set()
     else:
@@ -724,24 +745,43 @@ async def cancel_birthday(call: types.CallbackQuery, state: FSMContext):
 async def get_birthday(msg: types.Message, state: FSMContext):
     regex = r"\d{2}\.\d{2}\.\d{4}"
     if not re.search(regex, msg.text):
-        await msg.answer('Неверный формат даты. Повторите ввод.', reply_markup=cancel_reg_keyboard())
+        await msg.answer('Неверный формат даты. Повторите ввод.', 
+                        reply_markup=cancel_reg_keyboard())
         return
+    date_object = datetime.strptime(msg.text, "%d.%m.%Y")
+    await state.update_data(birthday=date_object.strftime("%Y-%m-%d"))
+    await msg.answer('И последний вопрос. Напиши, откуда Вы о нас узнали?', 
+                    reply_markup=cancel_reg_keyboard())
+    await StartState.source.set()
+
+
+#отмена при записи источника
+@dp.callback_query_handler(state=StartState.source)
+async def cancel_source(call: types.CallbackQuery, state: FSMContext):
+    await call.message.delete()
+    await state.finish()
+    await main_menu_message(call.message)
+
+#запись источника, откуда узнали и запись всех полученных данных в бд с галочкой "новичок"
+@dp.message_handler(state=StartState.source)
+async def get_source(msg: types.Message, state: FSMContext):
     state_data = await state.get_data()
     name = state_data.get('name')
     phone_number = state_data.get('phone_number_sign_up')
-    date_object = datetime.strptime(msg.text, "%d.%m.%Y")
-    birthday = date_object.strftime("%Y-%m-%d")
+    birthday = state_data.get('birthday')
+    source = msg.text
     user_id = msg.from_user.id
-    await dj.add_new_user(name, phone_number, birthday, user_id)
+    await dj.add_new_user(name, phone_number, birthday, source, user_id)
     await msg.answer(f'''
 ФИО: {name}
 Номер телефона: {phone_number}
-День рождения: {msg.text}
+День рождения: {birthday}
 
 Регистрация прошла успешно. Рады приветствовать!
 Вы всегда можете изменить свои данные с помощью команды /my_profile
 Совсем скоро я сообщу Вам место и время проведения Вашей первой тренировки в нашем клубе.''')
     await state.finish()
+
 
 #запись на занятие
 @dp.callback_query_handler(lambda call: call.data.startswith('accept_button'))
@@ -845,3 +885,72 @@ async def declain(call: types.CallbackQuery):
         return
     await call.message.delete()
     await call.message.answer('❌ Игра отклонена. Ждём Вас в следующий раз!')
+
+
+# информация по выбранному абонементу
+@dp.callback_query_handler(lambda call: call.data.startswith('abonement_button'))
+async def get_abonement(call: types.CallbackQuery):
+    abonement_id = call.data.split('_')[2]
+    abonement = await dj.get_abonement(abonement_id)
+    await call.message.delete()
+    message = f'<b>{abonement.name}</b>\n\n{abonement.description}\n\n{abonement.price} рублей'
+    keyboard = types.InlineKeyboardMarkup()
+    back_button = types.InlineKeyboardButton('Отмена', callback_data='back_abonements_button')
+    buy_button = types.InlineKeyboardButton('Купить', callback_data=f'buy_abonement_button_{abonement.id}')
+    keyboard.row(back_button, buy_button)
+    await call.message.answer(message, reply_markup=keyboard)
+
+
+# вернуться ко всем абонементам
+@dp.callback_query_handler(lambda call: call.data == 'back_abonements_button')
+async def back_abonements(call: types.CallbackQuery):
+    await call.message.delete()
+    await display_all_abonements(call.message)
+
+
+# выслать инвойс на покупку абонемента
+@dp.callback_query_handler(lambda call: call.data.startswith('buy_abonement_button'))
+async def buy_abonement(call: types.CallbackQuery):
+    abonement_id = call.data.split('_')[3]
+    abonement = await dj.get_abonement(abonement_id)
+    await call.message.delete()
+    price = types.LabeledPrice(label=abonement.name, amount=abonement.price * 100)
+    provider_data = json.dumps({
+        'receipt': {
+            'items': [{
+                'description': f'{abonement.name}',
+            'quantity': '1.00',
+            'amount': {
+                'value': f'{abonement.price}.00',
+                'currency': 'RUB'
+            },
+            'vat_code': 1
+            }]
+        }
+    })
+    await bot.send_invoice(call.from_user.id, 
+                        title=f'Покупка', 
+                        description=f'{abonement.name}', 
+                        provider_token=PAYMENT_TOKEN,
+                        start_parameter="time-machine-example",
+                        prices=[price],
+                        currency='RUB',
+                        payload=f'{abonement.id}',
+                        need_email = True,
+                        send_email_to_provider = True,
+                        provider_data=provider_data
+                        )
+
+
+# обработка оплаты
+@dp.pre_checkout_query_handler()
+async def pre_checkout_query(pre_checkout_q: types.PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_q.id, ok=True)
+
+
+# успешный платёж
+@dp.message_handler(content_types=types.message.ContentType.SUCCESSFUL_PAYMENT)
+async def successful_payment(msg: types.Message):
+    id = msg.successful_payment.invoice_payload
+    await dj.set_abonement_entry(msg.from_user.id, id)
+    await msg.answer('Оплата прошла успешно!')

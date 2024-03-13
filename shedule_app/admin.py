@@ -10,8 +10,8 @@ from datetime import datetime
 @admin.register(md.User)
 class UserAdmin(admin.ModelAdmin):
     form = UserAdminForm
-    list_display = ('name', 'tel_number', 'birthday', 'newbie')
-    list_filter = ('name', 'tel_number', 'birthday', 'newbie')
+    list_display = ('name', 'tel_number', 'birthday', 'source', 'newbie')
+    list_filter = ('name', 'tel_number', 'birthday', 'source', 'newbie')
     exclude = ('telegram_id',)
 
     def save_model(self, request, obj, form, change):
@@ -25,8 +25,8 @@ class UserAdmin(admin.ModelAdmin):
 @admin.register(md.Training)
 class TrainingAdmin(admin.ModelAdmin):
     exclude = ('was_end',)
-    list_display = ('place', 'address', 'time', 'day', 'repeat',)
-    list_filter = ('place', 'address', 'time', 'day', 'repeat',)
+    list_display = ('place', 'address', 'time', 'day', 'repeat', 'comment_1', 'comment_2')
+    list_filter = ('place', 'address', 'time', 'day', 'repeat', 'comment_1', 'comment_2')
 
 
 @admin.register(md.Journal)
@@ -66,8 +66,19 @@ class GameAdmin(admin.ModelAdmin):
         new_game.save()
 
 
-
 @admin.register(md.GameJournal)
 class GameJournalAdmin(admin.ModelAdmin):
     list_display = ('game', 'user', 'accept', 'answer_time', 'date_time')
     list_filter = ('game', 'user', 'accept', 'answer_time', 'date_time')
+
+
+@admin.register(md.Abonements)
+class AbonementsAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description', 'price', 'is_subscribe',)
+    list_filter = ('name', 'description', 'price', 'is_subscribe',)
+
+
+@admin.register(md.AbonementJournal)
+class AbonementJournalAdmin(admin.ModelAdmin):
+    list_display = ('user', 'abonement', 'date_time', 'end')
+    list_filter = ('user', 'abonement', 'date_time', 'end')

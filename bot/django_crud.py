@@ -46,12 +46,13 @@ def identification_by_tel_number(user_id, tel_number):
     return user.name
 
 @sync_to_async()
-def add_new_user(name, phone_number, birthday, user_id):
+def add_new_user(name, phone_number, birthday, source, user_id):
     new_user = mdl.User.objects.create(
             name=name, 
             tel_number=phone_number,
             birthday=birthday,
             telegram_id=user_id,
+            source=source,
             newbie=True
         )
     new_user.save()
@@ -234,6 +235,8 @@ def get_users_for_first_not(training):
         'place': training.place,
         'address': training.address,
         'route': training.route,
+        'comment_1': training.comment_1,
+        'comment_2': training.comment_2,
     }
     return {
         'users_data': users_data,
@@ -311,6 +314,8 @@ def get_training_info(id=None):
             'time': training.time,
             'place': training.place,
             'address': training.address,
+            'comment_1': training.comment_1,
+            'comment_2': training.comment_2,
         })
     return trainings_data
 
@@ -720,3 +725,44 @@ def get_game_users_admin(game_id, date_time):
         return None
     sorted_users_data = sorted(users_data, key=lambda x: x['answer_time'])
     return sorted_users_data
+
+
+#получение абонементов
+@sync_to_async()
+def get_abonements():
+    abonements = mdl.Abonements.objects.all()
+    return [abonement for abonement in abonements]
+
+
+@sync_to_async()
+def get_abonement(id):
+    abonement = mdl.Abonements.objects.filter(id=id).first()
+    return abonement
+
+
+@sync_to_async()
+def set_abonement_entry(user_telegram_id, abonement_id):
+    user = mdl.User.objects.filter(telegram_id=user_telegram_id).first()
+    abonement = mdl.Abonements.objects.filter(id=abonement_id).first()
+    mdl.AbonementJournal.objects.create(user=user, abonement=abonement)
+
+
+@sync_to_async()
+def get_subscriptions():
+    subscriptions = mdl.AbonementJournal.objects.filter(abonement__is_subscribe=True, end=False).all()
+    now = datetime.now()
+    # fake_now = datetime(2024, 5, 23)
+    ntf_users = []
+    for subscription in subscriptions:
+        abonement_time = subscription.abonement.time
+        was_buy_time = subscription.date_time.month
+        if abonement_time is not None:
+            months_difference = now.month - abonement_time
+            if months_difference == was_buy_time:
+                ntf_users.append({
+                    'tg_id': subscription.user.telegram_id,
+                    'abonement': subscription.abonement.name
+                })
+                subscription.end = True
+                subscription.save()
+    return ntf_users
